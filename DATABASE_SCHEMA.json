@@ -1,0 +1,74 @@
+{
+  "users": {
+    "uid": {
+      "uid": "string",
+      "email": "string",
+      "fullName": "string",
+      "phone": "string",
+      "role": "admin | doctor | patient",
+      "status": "active | inactive",
+      "createdAt": "timestamp",
+      "updatedAt": "timestamp"
+    }
+  },
+  "doctors": {
+    "doctorId": {
+      "id": "string (unique)",
+      "name": "string",
+      "email": "string",
+      "phone": "string",
+      "specialization": "string",
+      "status": "active | inactive",
+      "createdAt": "timestamp",
+      "updatedAt": "timestamp"
+    }
+  },
+  "patients": {
+    "patientId": {
+      "id": "string (unique)",
+      "name": "string",
+      "email": "string",
+      "phone": "string",
+      "dateOfBirth": "string (YYYY-MM-DD)",
+      "status": "active | inactive",
+      "createdAt": "timestamp",
+      "updatedAt": "timestamp"
+    }
+  },
+  "appointments": {
+    "appointmentId": {
+      "id": "string (unique)",
+      "patientName": "string",
+      "doctorName": "string",
+      "date": "string (YYYY-MM-DD)",
+      "time": "string (HH:MM)",
+      "reason": "string",
+      "status": "scheduled | completed | cancelled",
+      "createdAt": "timestamp",
+      "updatedAt": "timestamp"
+    }
+  },
+  "payments": {
+    "paymentId": {
+      "id": "string (unique)",
+      "patientName": "string",
+      "amount": "number",
+      "date": "string (YYYY-MM-DD)",
+      "status": "pending | completed | failed",
+      "createdAt": "timestamp",
+      "updatedAt": "timestamp"
+    }
+  },
+  "settings": {
+    "clinic": {
+      "name": "string",
+      "address": "string",
+      "phone": "string",
+      "email": "string",
+      "hours": {
+        "open": "string",
+        "close": "string"
+      }
+    }
+  }
+}
