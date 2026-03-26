@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { database } from "@/lib/firebase"
+import { database, auth } from "@/lib/firebase"
 import { ref, onValue } from "firebase/database"
+import { signOut } from "firebase/auth"
 import { useAuth } from "@/lib/auth-context" 
 import { DashboardHeader } from "@/components/dashboard-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,64 +12,85 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { 
   Users, 
   UserRound, 
-  CalendarCheck, 
   IndianRupee, 
   LayoutGrid,
   ArrowUpRight,
   PlusCircle,
-  Printer,
   ShieldCheck,
   BarChart3,
   Stethoscope,
   BriefcaseMedical,
-  History,
-  Newspaper // Added for Blog icon
+  Activity,
+  ArrowRight,
+  LogOut,
+  Newspaper,
+  Loader2
 } from "lucide-react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 export default function AdminDashboard() {
-  const { profile, clinicData } = useAuth() 
+  const { profile } = useAuth() 
+  const router = useRouter()
+  
+  // Local state for clinic metadata to solve the "clinicData" error
+  const [clinicDisplayName, setClinicDisplayName] = useState("Clinic")
   const [stats, setStats] = useState({
     doctors: 0,
     patients: 0,
     appointments: 0,
     revenue: 0,
-    blogs: 0, // New stat for blogs
+    blogs: 0,
   })
   const [loading, setLoading] = useState(true)
   const [completedAppointments, setCompletedAppointments] = useState<any[]>([])
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      router.push("/login");
+    } catch (error) {
+      console.error("Error signing out: ", error);
+    }
+  };
 
   useEffect(() => {
     if (!profile?.clinicId) return;
 
     const clinicPath = `clinics/${profile.clinicId}`;
-    const blogsPath = `blogs`; // Global blogs path
+    const blogsPath = `blogs`;
 
-    // Listen to Clinic Data
     const unsubscribeClinic = onValue(ref(database, clinicPath), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const allUsers = data.users || {};
-        const doctors = Object.values(allUsers).filter((u: any) => u.role === "doctor").length;
-        const patients = Object.values(allUsers).filter((u: any) => u.role === "patient").length;
-        const appointments = data.appointments ? Object.keys(data.appointments).length : 0;
+        
+        // Update Clinic Name from DB
+        setClinicDisplayName(data.clinicName || "Clinic");
 
+        const allUsers = data.users || {};
+        const doctorCount = Object.values(allUsers).filter((u: any) => u.role === "doctor").length;
+        const patientCount = Object.values(allUsers).filter((u: any) => u.role === "patient").length;
+        
         let revenue = 0;
         const completedApts: any[] = [];
+        
         if (data.payments) {
           Object.values(data.payments).forEach((payment: any) => {
             if (payment.status === "completed") {
               revenue += payment.finalAmount || 0;
-              completedApts.push({ ...payment, createdAt: payment.createdAt || Date.now() });
+              completedApts.push({ 
+                ...payment, 
+                createdAt: payment.createdAt || Date.now() 
+              });
             }
           });
         }
 
-        setStats(prev => ({ ...prev, doctors, patients, appointments, revenue }));
+        setStats(prev => ({ ...prev, doctors: doctorCount, patients: patientCount, revenue }));
         setCompletedAppointments(completedApts.sort((a, b) => b.createdAt - a.createdAt).slice(0, 5));
       }
     });
 
-    // Listen to Blog count
     const unsubscribeBlogs = onValue(ref(database, blogsPath), (snapshot) => {
       const blogCount = snapshot.exists() ? Object.keys(snapshot.val()).length : 0;
       setStats(prev => ({ ...prev, blogs: blogCount }));
@@ -83,120 +105,145 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
-        <div className="h-12 w-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-slate-500 font-bold animate-pulse uppercase tracking-widest text-xs">Synchronizing Core...</p>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#F8FAFC]">
+        <Loader2 className="h-12 w-12 text-red-600 animate-spin mb-4" />
+        <p className="text-slate-500 font-black animate-pulse uppercase tracking-[0.3em] text-[10px]">Accessing Secure Core...</p>
       </div>
     )
   }
 
   return (
-    <div className="w-full min-h-screen bg-[#F8FAFC] text-slate-900 pb-10">
+    <div className="w-full min-h-screen bg-[#F8FAFC] text-slate-900 pb-20">
       <DashboardHeader 
         title="Admin Command Center" 
-        description={`Full system access for ${clinicData?.clinicName || 'Clinic'}`}
+        description={`Full system management for ${clinicDisplayName}`}
       />
 
-      <div className="p-4 md:p-8 max-w-[1600px] mx-auto space-y-8">
+      <div className="p-4 md:p-10 max-w-[1600px] mx-auto space-y-10">
         
         {/* TOP LEVEL METRICS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <MetricCard label="Net Revenue" value={`₹${stats.revenue.toLocaleString()}`} icon={<IndianRupee />} color="blue" />
-          <MetricCard label="Total Patients" value={stats.patients} icon={<Users />} color="indigo" />
-          <MetricCard label="Active Doctors" value={stats.doctors} icon={<Stethoscope />} color="violet" />
-          <MetricCard label="Live Blog Posts" value={stats.blogs} icon={<Newspaper />} color="emerald" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <MetricCard label="Net Revenue" value={`₹${stats.revenue.toLocaleString()}`} icon={<IndianRupee size={24}/>} color="blue" />
+          <MetricCard label="Total Patients" value={stats.patients} icon={<Users size={24}/>} color="indigo" />
+          <MetricCard label="Active Doctors" value={stats.doctors} icon={<Stethoscope size={24}/>} color="violet" />
+          <MetricCard label="Live Blog Posts" value={stats.blogs} icon={<Newspaper size={24}/>} color="emerald" />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
           
-          {/* LEFT COLUMN: MODULE SHORTCUTS */}
-          <div className="lg:col-span-4 space-y-6">
-            <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-              <LayoutGrid size={14} /> System Modules
-            </h2>
+          {/* NAVIGATION SHORTCUTS */}
+          <div className="xl:col-span-4 space-y-8">
+            <div className="flex items-center justify-between">
+                <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                    <LayoutGrid size={14} className="text-red-600" /> Control Modules
+                </h2>
+                <Activity size={16} className="text-slate-300 animate-pulse" />
+            </div>
             
             <div className="grid grid-cols-1 gap-4">
               <ModuleLink 
-                title="Receptionist Mgmt" 
-                desc="Live Bookings & Patient Flow" 
-                icon={<BriefcaseMedical />} 
+                title="Receptionist Panel" 
+                desc="Appointment Tracking & Check-ins" 
+                icon={<BriefcaseMedical size={22}/>} 
                 href="/dashboard/admin/receptionist" 
                 color="blue"
               />
               <ModuleLink 
-                title="Doctor Registry" 
-                desc="Staff Profiles & Schedules" 
-                icon={<UserRound />} 
+                title="Doctor Management" 
+                desc="Profiles, Schedules & Performance" 
+                icon={<UserRound size={22}/>} 
                 href="/dashboard/admin/doctors" 
                 color="violet"
               />
-              {/* NEW BLOG MODULE LINK */}
               <ModuleLink 
-                title="Medical Insights Blog" 
-                desc="Manage & Publish Articles" 
-                icon={<Newspaper />} 
-                href="/dashboard/admin/blogs" 
-                color="red"
-              />
-              <ModuleLink 
-                title="Financial Analytics" 
-                desc="Revenue Logs & Extraction" 
-                icon={<BarChart3 />} 
+                title="Financial Suite" 
+                desc="Detailed Revenue & Payout Logs" 
+                icon={<BarChart3 size={22}/>} 
                 href="/dashboard/admin/analytics" 
                 color="emerald"
               />
             </div>
 
             {/* QUICK ACTIONS CARD */}
-            <Card className="bg-slate-900 text-white border-none rounded-[2rem] overflow-hidden shadow-xl">
-              <CardHeader>
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <ShieldCheck className="text-blue-400" /> Admin Fast-Track
+            <Card className="bg-slate-900 text-white border-none rounded-[2.5rem] shadow-2xl">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xs font-black uppercase tracking-widest flex items-center gap-2 text-blue-400">
+                  <ShieldCheck size={16} /> Instant Actions
                 </CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-3">
-                <QuickActionButton icon={<PlusCircle size={16} />} label="Add Staff" href="/dashboard/admin/doctors" />
-                <QuickActionButton icon={<Newspaper size={16} />} label="Post Blog" href="/dashboard/admin/blogs" />
-                <QuickActionButton icon={<History size={16} />} label="Logs" href="/dashboard/admin/analytics" />
-                <QuickActionButton icon={<ArrowUpRight size={16} />} label="Reports" href="/dashboard/admin/analytics" />
+              <CardContent className="grid grid-cols-2 gap-4">
+                <QuickActionButton icon={<PlusCircle size={18} />} label="Add Staff" href="/dashboard/admin/doctors" />
+                <QuickActionButton icon={<Newspaper size={18} />} label="Post Blog" href="/dashboard/admin/blogs" />
+                <QuickActionButton icon={<ArrowUpRight size={18} />} label="Reports" href="/dashboard/admin/analytics" />
+                <button 
+                  onClick={handleSignOut}
+                  className="flex flex-col items-center justify-center p-5 rounded-[1.5rem] bg-red-500/10 border border-red-500/20 hover:bg-red-600 hover:text-white transition-all duration-300 gap-3 group"
+                >
+                  <LogOut size={18} className="text-red-500 group-hover:text-white transition-transform" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Sign Out</span>
+                </button>
               </CardContent>
             </Card>
           </div>
 
-          {/* RIGHT COLUMN: REVENUE & TRANSACTIONS */}
-          <div className="lg:col-span-8">
-            <Card className="bg-white border-slate-200/60 shadow-sm rounded-[2rem] h-full">
-              <CardHeader className="flex flex-row items-center justify-between border-b border-slate-50 pb-6 px-8">
+          {/* MAIN DATA FEED */}
+          <div className="xl:col-span-8">
+            <Card className="bg-white border-slate-200/60 shadow-sm rounded-[2.5rem] overflow-hidden flex flex-col h-full">
+              <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-50 py-8 px-10 gap-4">
                 <div>
-                  <CardTitle className="text-slate-900 font-black">Recent Revenue Logs</CardTitle>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-tighter">Completed Transactions Only</p>
+                  <CardTitle className="text-2xl font-black text-slate-900 tracking-tight">Financial Monitor</CardTitle>
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Real-time Transaction Stream</p>
                 </div>
-                <Button variant="ghost" className="text-blue-600 font-bold text-xs">View All</Button>
+                <Button variant="outline" className="rounded-full border-slate-200 text-slate-600 font-bold text-xs px-6" asChild>
+                    <Link href="/dashboard/admin/analytics">View Analytics</Link>
+                </Button>
               </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50/50 hover:bg-transparent border-none">
-                      <TableHead className="px-8 text-[10px] font-black uppercase text-slate-400">Patient</TableHead>
-                      <TableHead className="text-[10px] font-black uppercase text-slate-400">Treatment</TableHead>
-                      <TableHead className="text-[10px] font-black uppercase text-slate-400 text-right px-8">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {completedAppointments.map((apt, i) => (
-                      <TableRow key={i} className="hover:bg-slate-50/80 transition-colors border-slate-50">
-                        <TableCell className="px-8 font-bold text-slate-700">{apt.patientName}</TableCell>
-                        <TableCell>
-                          <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-[10px] font-black uppercase">
-                            {apt.diseaseType || "General"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right px-8 font-black text-slate-900">₹{apt.finalAmount}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <CardContent className="p-0 flex-1">
+                <div className="overflow-x-auto">
+                    <Table>
+                    <TableHeader>
+                        <TableRow className="bg-slate-50/50 hover:bg-transparent border-none">
+                        <TableHead className="px-10 py-5 text-[10px] font-black uppercase text-slate-400">Patient</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase text-slate-400">Type</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase text-slate-400 text-right px-10">Amount</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {completedAppointments.length > 0 ? (
+                            completedAppointments.map((apt, i) => (
+                            <TableRow key={i} className="hover:bg-slate-50/80 transition-colors border-slate-50 group">
+                                <TableCell className="px-10 py-5 font-bold text-slate-700">
+                                    <div className="flex flex-col">
+                                        <span>{apt.patientName}</span>
+                                        <span className="text-[9px] font-medium text-slate-400 uppercase">ID: {apt.id?.slice(-6)}</span>
+                                    </div>
+                                </TableCell>
+                                <TableCell>
+                                <span className="px-4 py-1.5 rounded-full bg-blue-50 text-blue-600 text-[9px] font-black uppercase">
+                                    {apt.diseaseType || "General"}
+                                </span>
+                                </TableCell>
+                                <TableCell className="text-right px-10 font-black text-slate-900 text-lg">
+                                    ₹{apt.finalAmount.toLocaleString()}
+                                </TableCell>
+                            </TableRow>
+                            ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={3} className="h-60 text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest">
+                                    No transaction data available
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                    </Table>
+                </div>
               </CardContent>
+              <div className="p-6 bg-slate-50/50 border-t border-slate-50 flex justify-center">
+                  <button className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-red-600 transition-colors flex items-center gap-2">
+                      Export Financial Data <ArrowRight size={12}/>
+                  </button>
+              </div>
             </Card>
           </div>
 
@@ -206,23 +253,25 @@ export default function AdminDashboard() {
   )
 }
 
-// Helper Components
+/** * HELPER COMPONENTS
+ */
+
 function MetricCard({ label, value, icon, color }: any) {
   const colors: any = {
-    blue: "bg-blue-600 shadow-blue-200 text-white",
-    indigo: "bg-indigo-600 shadow-indigo-200 text-white",
-    violet: "bg-violet-600 shadow-violet-200 text-white",
-    emerald: "bg-emerald-600 shadow-emerald-200 text-white"
+    blue: "bg-blue-600 shadow-blue-100 text-white",
+    indigo: "bg-indigo-600 shadow-indigo-100 text-white",
+    violet: "bg-violet-600 shadow-violet-100 text-white",
+    emerald: "bg-emerald-600 shadow-emerald-100 text-white"
   }
   return (
-    <Card className="border-none shadow-sm rounded-[2rem] bg-white overflow-hidden group hover:scale-[1.02] transition-all">
-      <CardContent className="p-6 flex items-center gap-5">
-        <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 ${colors[color]}`}>
+    <Card className="border-none shadow-sm rounded-[2.5rem] bg-white group hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+      <CardContent className="p-8 flex items-center gap-6">
+        <div className={`h-16 w-16 rounded-2xl flex items-center justify-center shrink-0 ${colors[color]}`}>
           {icon}
         </div>
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</p>
-          <h3 className="text-2xl font-black text-slate-900 tracking-tight">{value}</h3>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">{label}</p>
+          <h3 className="text-3xl font-black text-slate-900 tracking-tighter">{value}</h3>
         </div>
       </CardContent>
     </Card>
@@ -234,29 +283,31 @@ function ModuleLink({ title, desc, icon, href, color }: any) {
     blue: "text-blue-600 bg-blue-50",
     violet: "text-violet-600 bg-violet-50",
     emerald: "text-emerald-600 bg-emerald-50",
-    red: "text-red-600 bg-red-50" // Added red theme for blog
+    red: "text-red-600 bg-red-50" 
   }
   return (
-    <a href={href} className="group block p-5 bg-white border border-slate-200/60 rounded-[1.5rem] hover:border-blue-200 hover:shadow-md transition-all">
-      <div className="flex items-center gap-4">
-        <div className={`h-12 w-12 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 ${colorMap[color]}`}>
+    <Link href={href} className="group block p-6 bg-white border border-slate-200/60 rounded-[2rem] hover:border-red-200 hover:shadow-xl hover:shadow-red-50 transition-all duration-300">
+      <div className="flex items-center gap-5">
+        <div className={`h-14 w-14 rounded-2xl flex items-center justify-center shrink-0 transition-all group-hover:rounded-full ${colorMap[color]}`}>
           {icon}
         </div>
         <div className="flex-1">
-          <h4 className="text-sm font-black text-slate-900">{title}</h4>
-          <p className="text-[11px] text-slate-400 font-medium">{desc}</p>
+          <h4 className="text-base font-black text-slate-900 tracking-tight">{title}</h4>
+          <p className="text-xs text-slate-400 font-medium">{desc}</p>
         </div>
-        <ArrowUpRight className="text-slate-300 group-hover:text-blue-600 transition-colors" size={18} />
+        <div className="h-10 w-10 rounded-full flex items-center justify-center bg-slate-50 group-hover:bg-red-600 group-hover:text-white transition-all">
+            <ArrowUpRight size={20} />
+        </div>
       </div>
-    </a>
+    </Link>
   )
 }
 
 function QuickActionButton({ icon, label, href }: any) {
   return (
-    <a href={href} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all gap-2 group">
-      <div className="text-blue-400 group-hover:scale-110 transition-transform">{icon}</div>
-      <span className="text-[10px] font-bold uppercase tracking-tighter">{label}</span>
-    </a>
+    <Link href={href} className="flex flex-col items-center justify-center p-5 rounded-[1.5rem] bg-white/5 border border-white/10 hover:bg-white hover:text-slate-900 transition-all duration-300 gap-3 group text-center">
+      <div className="text-blue-400 group-hover:text-red-600 group-hover:scale-110 transition-transform">{icon}</div>
+      <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
+    </Link>
   )
 }

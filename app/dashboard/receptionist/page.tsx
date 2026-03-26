@@ -15,12 +15,12 @@ import {
   CalendarCheck,
   MoreHorizontal,
   Activity,
-  Palette,
   MapPin,
   Search,
   Calendar as CalendarIcon,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ReceiptIndianRupee // Added for Billing Icon
 } from "lucide-react"
 
 export default function ReceptionistDashboard() {
@@ -73,15 +73,12 @@ export default function ReceptionistDashboard() {
   useEffect(() => {
     if (!profile?.clinicId) return
 
-    // Fetch Branding
     const settingsRef = ref(database, `clinics/${profile.clinicId}/clinicInfo`)
     onValue(settingsRef, (snapshot) => {
       if (snapshot.exists()) setClinicData(snapshot.val())
     })
 
-    // Fetch ALL Appointments (Real-time)
     const apptsRef = ref(database, `clinics/${profile.clinicId}/appointments`)
-    
     return onValue(apptsRef, (snapshot) => {
       const data = snapshot.val()
       if (data) {
@@ -96,15 +93,15 @@ export default function ReceptionistDashboard() {
     })
   }, [profile?.clinicId])
 
-  // --- Filtering Logic ---
+  // --- Filtering & Stats Logic ---
   const filteredAppointments = allAppointments.filter(appt => {
     const matchesDate = appt.date === selectedDate
-    const matchesSearch = appt.patientName?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         appt.doctorName?.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesSearch = 
+      appt.patientName?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      appt.doctorName?.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesDate && matchesSearch
   }).sort((a, b) => a.time.localeCompare(b.time))
 
-  // Update Stats based on filtered list or global today list
   useEffect(() => {
     const todayList = allAppointments.filter(a => a.date === selectedDate)
     setStats({
@@ -176,33 +173,21 @@ export default function ReceptionistDashboard() {
 
         {/* Live Counters */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Selected Date" value={filteredAppointments.length} color="text-blue-500" icon={Clock} theme={theme} />
-          <StatCard label="In Lobby" value={stats.waiting} color="text-amber-500" icon={Users} theme={theme} />
-          <StatCard label="In Cabin" value={stats.inConsultation} color="text-indigo-500" icon={Activity} theme={theme} />
-          <StatCard label="Print Rx" value={stats.readyToPrint} color="text-emerald-500" icon={Printer} theme={theme} />
+          <StatCard label="Total Booked" value={filteredAppointments.length} color="text-blue-500" icon={Clock} />
+          <StatCard label="In Lobby" value={stats.waiting} color="text-amber-500" icon={Users} />
+          <StatCard label="In Cabin" value={stats.inConsultation} color="text-indigo-500" icon={Activity} />
+          <StatCard label="Print Rx" value={stats.readyToPrint} color="text-emerald-500" icon={Printer} />
         </div>
 
         {/* Queue Table */}
         <Card className="border-none rounded-[2rem] shadow-xl shadow-slate-200/50 overflow-hidden bg-white">
           <div className={`p-6 md:p-8 border-b flex flex-col md:flex-row justify-between items-center gap-4 ${active.tableHead}`}>
              <div className="flex items-center gap-4">
-                <button 
-                  onClick={() => {
-                    const d = new Date(selectedDate);
-                    d.setDate(d.getDate() - 1);
-                    setSelectedDate(d.toISOString().split('T')[0]);
-                  }}
-                  className="p-2 hover:bg-white rounded-full transition-colors"><ChevronLeft size={20}/></button>
+                <button onClick={() => updateDate(-1)} className="p-2 hover:bg-white rounded-full transition-colors"><ChevronLeft size={20}/></button>
                 <h2 className="font-black text-xl uppercase tracking-tight">
                   Schedule: {new Date(selectedDate).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </h2>
-                <button 
-                  onClick={() => {
-                    const d = new Date(selectedDate);
-                    d.setDate(d.getDate() + 1);
-                    setSelectedDate(d.toISOString().split('T')[0]);
-                  }}
-                  className="p-2 hover:bg-white rounded-full transition-colors"><ChevronRight size={20}/></button>
+                <button onClick={() => updateDate(1)} className="p-2 hover:bg-white rounded-full transition-colors"><ChevronRight size={20}/></button>
              </div>
              <span className="text-[10px] font-black bg-white px-4 py-2 rounded-full border shadow-sm">
                {filteredAppointments.length} TOTAL SESSIONS
@@ -241,11 +226,24 @@ export default function ReceptionistDashboard() {
                     </td>
                     <td className="p-6 text-right">
                       <div className="flex justify-end gap-2">
+                        {/* 1. Check-In Operation */}
                         {appt.status === "scheduled" && (
                           <button onClick={() => handleCheckIn(appt.id)} className={`${active.primary} text-white px-4 py-2 rounded-xl text-[10px] font-black shadow-lg ${active.buttonShadow}`}>
                             CHECK-IN
                           </button>
                         )}
+                        
+                        {/* 2. Billing Operation (Active after Check-In) */}
+                        {appt.status !== "scheduled" && (
+                          <button 
+                            onClick={() => router.push(`/dashboard/receptionist/billing?apptId=${appt.id}&name=${appt.patientName}`)} 
+                            className="bg-slate-900 text-white px-4 py-2 rounded-xl text-[10px] font-black shadow-lg shadow-slate-200 flex items-center gap-2"
+                          >
+                            <ReceiptIndianRupee size={14} /> BILLING
+                          </button>
+                        )}
+
+                        {/* 3. Prescription Printing */}
                         {appt.hasPrescription && (
                           <button 
                             onClick={() => router.push(`/dashboard/receptionist/print/${appt.id}`)}
@@ -264,7 +262,7 @@ export default function ReceptionistDashboard() {
             {filteredAppointments.length === 0 && (
               <div className="p-20 text-center">
                 <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                   <CalendarIcon className="text-slate-300" />
+                    <CalendarIcon className="text-slate-300" />
                 </div>
                 <p className="text-slate-400 font-black uppercase text-[10px] tracking-[0.2em]">No records found for this date.</p>
               </div>
@@ -274,9 +272,15 @@ export default function ReceptionistDashboard() {
       </div>
     </div>
   )
+
+  function updateDate(days: number) {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + days);
+    setSelectedDate(d.toISOString().split('T')[0]);
+  }
 }
 
-function StatCard({ label, value, color, icon: Icon, theme }: any) {
+function StatCard({ label, value, color, icon: Icon }: any) {
   return (
     <Card className="bg-white border-none p-6 flex items-center justify-between group hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 shadow-sm rounded-3xl">
       <div>

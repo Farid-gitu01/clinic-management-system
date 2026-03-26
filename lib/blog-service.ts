@@ -2,6 +2,7 @@ import { ref, onValue, push, set } from "firebase/database";
 import { database } from "./firebase"; // Ensure your firebase config exports 'rtdb'
 
 export interface BlogPost {
+  excerpt: string;
   id?: string;
   type: string;
   title: string;

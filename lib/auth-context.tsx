@@ -9,6 +9,8 @@ import { ref, get } from "firebase/database"
 export type UserRole = "admin" | "doctor" | "patient"
 
 export interface UserProfile {
+  clinicName: string
+  clinicName: string
   experience: string
   uid: string
   email: string
